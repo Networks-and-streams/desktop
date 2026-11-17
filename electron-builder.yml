@@ -1,0 +1,75 @@
+# electron-builder configuration (plan §5.1/§5.7): NSIS installer + portable
+# x64 build for Windows 10/11. Unsigned → SmartScreen shows a warning
+# ("More info → Run anyway"), which is documented in the manual checklist.
+appId: com.networkstreams.graph-resolver
+productName: Graph Resolver
+copyright: © 2026 Graph Resolver
+
+directories:
+  # Installers land in desktop/build/, icons are read from desktop/resources/.
+  output: build
+  buildResources: resources
+
+# The shell is a handful of compiled files; everything else is shipped through
+# extraResources (below) so the backend/compute/frontend keep their own layout
+# on disk and native binaries are never touched by the asar layer.
+files:
+  - dist/**/*
+  - package.json
+
+# asar keeps native modules and spawned executables awkward (paths inside the
+# archive cannot be executed directly), and this app spawns real processes —
+# ship the app directory unpacked instead.
+asar: false
+
+# The app's own node_modules (embedded-postgres + pg) contain no native addons
+# that must be rebuilt against the Electron ABI; the backend runs under
+# ELECTRON_RUN_AS_NODE with its own node_modules in extraResources.
+npmRebuild: false
+
+win:
+  target:
+    - nsis
+    - portable
+  artifactName: GraphResolver-${version}-${arch}-setup.${ext}
+  # No code signing configured — see the SmartScreen note above.
+
+portable:
+  artifactName: GraphResolver-${version}-${arch}-portable.${ext}
+  # The stub extracts ~800 MB into %TEMP% on every launch (minutes under
+  # antivirus scanning) and is otherwise completely silent — the user sees
+  # nothing and assumes the app is broken. A splash bitmap is shown by NSIS's
+  # BgImage for the whole extraction, then destroyed right before the app
+  # starts (24-bit, 96 DPI — see scripts/make-icon.mjs).
+  splashImage: resources/splash.bmp
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Graph Resolver
+  deleteAppDataOnUninstall: false
+  # Keep userData (config.json + the PostgreSQL data directory) by default so
+  # an upgrade does not wipe the user's graphs.
+
+extraResources:
+  # Rust compute service (gRPC).
+  - from: ../compute/target/release/compute.exe
+    to: compute.exe
+  # Production backend: dist/, prisma migrations, prisma.config.ts, node_modules.
+  # `from` must be the *parent* dir: electron-builder's copy filter always
+  # drops the root `node_modules` of a copy source (util/filter.js —
+  # `relative === "node_modules"` → false), so `resources/backend` would ship
+  # without node_modules. From `resources` the path becomes
+  # `backend/node_modules`, which copies normally. (`resources/icon.png` rides
+  # along — harmless.)
+  - from: resources
+    to: .
+  # Built SPA, served by the backend on the single desktop origin.
+  - from: ../frontend/dist
+    to: frontend
+  # gRPC contract shared with compute.
+  - from: ../compute/proto/compute.proto
+    to: proto/compute.proto

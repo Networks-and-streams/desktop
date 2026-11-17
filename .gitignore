@@ -1,0 +1,17 @@
+# Build artifacts
+dist/
+build/
+resources/backend/
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor/OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
